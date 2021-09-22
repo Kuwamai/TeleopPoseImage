@@ -60,3 +60,4 @@ crashlytics-build.properties
 
 Assets/uWindowCapture*
 uWindowCapture.log
+.vscode
