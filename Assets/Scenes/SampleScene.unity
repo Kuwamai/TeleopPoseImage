@@ -404,7 +404,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   topicName: arm_pose
-  publishMessageFrequency: 0.5
+  publishMessageFrequency: 0.05
   uwcTexture: {fileID: 23678130}
   offset: {x: 8, y: 31}
   texture: {fileID: 0}

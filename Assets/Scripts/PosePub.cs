@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
 using PoseMsg = RosMessageTypes.Geometry.PoseMsg;
+using PoseStampedMsg = RosMessageTypes.Geometry.PoseStampedMsg;
 using PointMsg = RosMessageTypes.Geometry.PointMsg;
 using QuaternionMsg = RosMessageTypes.Geometry.QuaternionMsg;
+using HeaderMsg = RosMessageTypes.Std.HeaderMsg;
 using static Unity.Mathematics.math;
 
 namespace uWindowCapture
@@ -35,7 +37,7 @@ public class PosePub : MonoBehaviour
     void Start()
     {
         ros = ROSConnection.instance;
-        ros.RegisterPublisher<PoseMsg>(topicName);
+        ros.RegisterPublisher<PoseStampedMsg>(topicName);
     }
 
     void Update()
@@ -45,6 +47,10 @@ public class PosePub : MonoBehaviour
         int h = window.height - offset.y;
         int x = offset.x;
         int y = offset.y;
+        Vector3[] vec3 = new Vector3[4];
+        Vector3Int[] vec3_int = new Vector3Int[4];
+        Matrix4x4 rot_mat = Matrix4x4.identity;
+        Quaternion rot_qua = Quaternion.identity;
 
         CreateTextureIfNeeded(w, h);
         if (window == null || window.width == 0) return;
@@ -52,31 +58,49 @@ public class PosePub : MonoBehaviour
         if (window.GetPixels(colors, x, y, w, h)) {
             texture.SetPixels32(colors);
             texture.Apply();
-            Vector3 pos = Vector3.zero;
-            Vector3Int pos_int = Vector3Int.zero;
-            for(int i=0;i<32;i++)
+
+            for(int wi=0;wi<4;wi++)
             {
-                Vector4 color = texture.GetPixel(Mathf.FloorToInt(w/8f), Mathf.FloorToInt(h/64f+h/32f*i));
-                Vector3Int color_bit = Vector3Int.RoundToInt(color);
-                pos_int.x += color_bit.x << i;
-                pos_int.y += color_bit.y << i;
-                pos_int.z += color_bit.z << i;
+                vec3[wi] = Vector3.zero;
+                vec3_int[wi] = Vector3Int.zero;
+
+                for(int hi=0;hi<32;hi++)
+                {
+                    Vector4 color = texture.GetPixel(Mathf.FloorToInt(w/8f+w/4f*wi), Mathf.FloorToInt(h/64f+h/32f*hi));
+                    Vector3Int color_bit = Vector3Int.RoundToInt(color);
+                    vec3_int[wi].x += color_bit.x << hi;
+                    vec3_int[wi].y += color_bit.y << hi;
+                    vec3_int[wi].z += color_bit.z << hi;
+                }
+                vec3[wi].x = asfloat(vec3_int[wi].x);
+                vec3[wi].y = asfloat(vec3_int[wi].y);
+                vec3[wi].z = asfloat(vec3_int[wi].z);
             }
-            pos.x = asfloat(pos_int.x);
-            pos.y = asfloat(pos_int.y);
-            pos.z = asfloat(pos_int.z);
-            Debug.Log(pos);
+            for(int i=0;i<3;i++)
+            {
+                rot_mat.SetRow(i, new Vector4(vec3[i+1].x, vec3[i+1].y, vec3[i+1].z, 0));
+            }
+            rot_qua = rot_mat.rotation;
+            Debug.Log(vec3[0]);
+            Debug.Log(rot_qua);
         }
 
         timeElapsed += Time.deltaTime;
         if (timeElapsed > publishMessageFrequency)
         {
-            PoseMsg msg_data = new PoseMsg(
-                new PointMsg(1, 2, 3),
-                new QuaternionMsg(4, 5, 6, 7)
+            PoseMsg pose = new PoseMsg(
+                new PointMsg(vec3[0].z, -vec3[0].x, vec3[0].y),
+                new QuaternionMsg(rot_qua.z, -rot_qua.x, rot_qua.y, -rot_qua.w)
+            );
+            
+            HeaderMsg header = new HeaderMsg();
+            header.frame_id = "unity";
+            PoseStampedMsg posestamped = new PoseStampedMsg(
+                header,
+                pose
             );
 
-            ros.Send(topicName, msg_data);
+            ros.Send(topicName, posestamped);
             timeElapsed = 0;
         }
     }
